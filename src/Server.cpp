@@ -148,6 +148,7 @@
 //     https://www.freedesktop.org/software/gstreamer-sdk/data/docs/latest/glib/glib-GVariantType.html
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#include <iostream>
 #include <algorithm>
 
 #include "Server.h"
@@ -261,7 +262,7 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				self.methodReturnValue(pInvocation, "Acme Inc.", true);
+				self.methodReturnValue(pInvocation, "Cotangent Software LLC", true);
 			})
 
 		.gattCharacteristicEnd()
@@ -274,51 +275,11 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 			// Standard characteristic "ReadValue" method call
 			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
 			{
-				self.methodReturnValue(pInvocation, "Marvin-PA", true);
+				self.methodReturnValue(pInvocation, "PiCopter-W", true);
 			})
 
 		.gattCharacteristicEnd()
 
-	.gattServiceEnd()
-
-	// Battery Service (0x180F)
-	//
-	// This is a fake battery service that conforms to org.bluetooth.service.battery_service. For details, see:
-	//
-	//     https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.battery_service.xml
-	//
-	// We also handle updates to the battery level from inside the server (see onUpdatedValue). There is an external method
-	// (see main.cpp) that updates our battery level and posts an update using ggkPushUpdateQueue. Those updates are used
-	// to notify us that our value has changed, which translates into a call to `onUpdatedValue` from the idleFunc (see
-	// Init.cpp).
-	.gattServiceBegin("battery", "180F")
-
-		// Characteristic: Battery Level (0x2A19)
-		//
-		// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.battery_level.xml
-		.gattCharacteristicBegin("level", "2A19", {"read", "notify"})
-
-			// Standard characteristic "ReadValue" method call
-			.onReadValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
-			{
-				uint8_t batteryLevel = self.getDataValue<uint8_t>("battery/level", 0);
-				self.methodReturnValue(pInvocation, batteryLevel, true);
-			})
-
-			// Handle updates to the battery level
-			//
-			// Here we use the onUpdatedValue to set a callback that isn't exposed to BlueZ, but rather allows us to manage
-			// updates to our value. These updates may have come from our own server or some other source.
-			//
-			// We can handle updates in any way we wish, but the most common use is to send a change notification.
-			.onUpdatedValue(CHARACTERISTIC_UPDATED_VALUE_CALLBACK_LAMBDA
-			{
-				uint8_t batteryLevel = self.getDataValue<uint8_t>("battery/level", 0);
-				self.sendChangeNotificationValue(pConnection, batteryLevel);
-				return true;
-			})
-
-		.gattCharacteristicEnd()
 	.gattServiceEnd()
 
 	// Current Time Service (0x1805)
@@ -413,20 +374,6 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				self.sendChangeNotificationValue(pConnection, pTextString);
 				return true;
 			})
-
-			// GATT Descriptor: Characteristic User Description (0x2901)
-			// 
-			// See: https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.characteristic_user_description.xml
-			.gattDescriptorBegin("description", "2901", {"read"})
-
-				// Standard descriptor "ReadValue" method call
-				.onReadValue(DESCRIPTOR_METHOD_CALLBACK_LAMBDA
-				{
-					const char *pDescription = "A mutable text string used for testing. Read and write to me, it tickles!";
-					self.methodReturnValue(pInvocation, pDescription, true);
-				})
-
-			.gattDescriptorEnd()
 
 		.gattCharacteristicEnd()
 	.gattServiceEnd()
@@ -529,6 +476,24 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 
 			.gattDescriptorEnd()
 
+		.gattCharacteristicEnd()
+	.gattServiceEnd()
+	.gattServiceBegin("picopter", "072d2971-44d2-4518-8722-2ef1baa596ef")
+		.gattCharacteristicBegin("throttle", "42604564-66de-4cb0-a4cd-a1f238d49739", {"write"})
+			.onWriteValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				// Update the text string value
+				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
+				gsize size;
+				gconstpointer pPtr = g_variant_get_fixed_array(const_cast<GVariant *>(pAyBuffer), &size, 1);
+				const guint16 *throttle = static_cast<const guint16 *>(pPtr);
+				self.setDataPointer("controls/throttle", throttle);
+
+				// Note: Even though the WriteValue method returns void, it's important to return like this, so that a
+				// dbus "method_return" is sent, otherwise the client gets an error (ATT error code 0x0e"unlikely").
+				// Only "write-without-response" works without this
+				self.methodReturnVariant(pInvocation, NULL);
+			})
 		.gattCharacteristicEnd()
 	.gattServiceEnd(); // << -- NOTE THE SEMICOLON
 
