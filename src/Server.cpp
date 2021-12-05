@@ -495,6 +495,28 @@ Server::Server(const std::string &serviceName, const std::string &advertisingNam
 				self.methodReturnVariant(pInvocation, NULL);
 			})
 		.gattCharacteristicEnd()
+		.gattCharacteristicBegin("angle", "b8488d4a-b04b-4a54-b624-3831ea7edeb7", {"write"})
+			.onWriteValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				// we'll let the callback handle this one (in picopter project)
+				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
+				self.setDataPointer("controls/angle", pAyBuffer);
+
+				self.methodReturnVariant(pInvocation, NULL);
+			})
+		.gattCharacteristicEnd()
+		.gattCharacteristicBegin("operation", "6a191f37-9d9f-47f9-bc1c-726bc0498d48", {"write"})
+			.onWriteValue(CHARACTERISTIC_METHOD_CALLBACK_LAMBDA
+			{
+				GVariant *pAyBuffer = g_variant_get_child_value(pParameters, 0);
+				gsize size;
+				gconstpointer pPtr = g_variant_get_fixed_array(const_cast<GVariant *>(pAyBuffer), &size, 1);
+				const guchar *operation = static_cast<const guchar *>(pPtr);
+				self.setDataPointer("controls/operation", operation);
+
+				self.methodReturnVariant(pInvocation, NULL);
+			})
+		.gattCharacteristicEnd()
 	.gattServiceEnd(); // << -- NOTE THE SEMICOLON
 
 	//  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
